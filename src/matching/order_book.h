@@ -142,7 +142,8 @@ namespace exchange::matching {
         }
 
         std::span<const Event> cancel_order(
-            core::OrderId order_id, 
+            core::OrderId order_id,
+            core::ParticipantId participant_id,
             core::Timestamp timestamp
         ) {
             reset_events();
@@ -153,87 +154,98 @@ namespace exchange::matching {
                 return events();
             }
 
+            if (order->participant_id != participant_id) {
+                emit_rejected(timestamp, order_id, ReasonCode::ORDER_OWNERSHIP_MISMATCH);
+                return events();
+            }
+
             const core::Quantity canceled_qty = order->qty;
             order->status = core::OrderStatus::CANCELED;
             emit_canceled(timestamp, order_id, canceled_qty);
             retire_order(*order, core::OrderStatus::CANCELED);
             return events();
+        }
 
-            std::span<const Event> modify_order(
-                core::OrderId order_id,
-                core::Quantity new_qty,
-                core::Price new_price,
-                core::Timestamp timestamp = 0
-            ) {
-                reset_events();
+        std::span<const Event> modify_order(
+            core::OrderId order_id,
+            core::Quantity new_qty,
+            core::Price new_price,
+            core::ParticipantId participant_id,
+            core::Timestamp timestamp
+        ) {
+            reset_events();
 
-                Order *order = find_active_order(order_id);
-                if (order == nullptr) {
-                    emit_rejected(timestamp, order_id, lookup_reject_reason(order_id));
-                    return events();
-                }
-
-                if (order->is_stop_order()) {
-                    emit_rejected(timestamp, order_id, ReasonCode::INVALID_MODIFICATION);
-                    return events();
-                }
-
-                if (new_qty == 0) {
-                    emit_rejected(timestamp, order_id, ReasonCode::ZERO_QUANTITY);
-                    return events();
-                }
-
-                if (new_price < 0) {
-                    emit_rejected(timestamp, order_id, ReasonCode::NEGATIVE_PRICE);
-                    return events();
-                }
-
-                if (new_price == order->price && new_qty < order->qty) {
-                    reduced_order_quantity(*order, new_qty, timestamp);
-                    return events();
-                }
-
-                if (new_price == order->price && new_qty == order->qty) {
-                    return events();
-                }
-
-                const core::Side side = order->side;
-                const core::OrderType type = order->type;
-                const core::ParticipantId participant_id = order->participant_id;
-                const core::Price trigger_price = order->trigger_price;
-                const core::Quantity peak_qty = order->peak_qty;
-
-                emit_canceled(timestamp, order_id, order->qty);
-                retire_order(*order, core::OrderStatus::CANCELED);
-
-                Order *replacement = order_pool_.allocate();
-                if (replacemeent == nullptr) [[unlikely]] {
-                    emit_rejected(timestamp, order_id, ReasonCode::ORDER_POOL_EXHAUSTED);
-                    return events();
-                }
-
-                replacement = std::construct_at(replacement, Order{
-                    .id = order_id,
-                    .side = side,
-                    .price = new_price,
-                    .qty = new_qty,
-                    .original_qty = new_qty,
-                    .display_qty = new_qty,
-                    .hidden_qty = 0,
-                    .timestamp = timestamp,
-                    .type = type,
-                    .status = core::OrderStatus::NEW,
-                    .participant_id = participant_id,
-                    .trigger_price = trigger_price,
-                    .peak_qty = peak_qty,
-                });
-
-                prepare_visble_slice(*replacement);
-                orders_[order_id] = OrderRecord{.order = replacement, .last_status = core::OrderStatus::NEW};
-
-                execute_inbound_order(*replacement, timestamp, true);
+            Order *order = find_active_order(order_id);
+            if (order == nullptr) {
+                emit_rejected(timestamp, order_id, lookup_reject_reason(order_id));
                 return events();
             }
+
+            if (order->participant_id != participant_id) {
+                emit_rejected(timestamp, order_id, ReasonCode::ORDER_OWNERSHIP_MISMATCH);
+                return events();
+            }
+
+            if (order->is_stop_order()) {
+                emit_rejected(timestamp, order_id, ReasonCode::INVALID_MODIFICATION);
+                return events();
+            }
+
+            if (new_qty == 0) {
+                emit_rejected(timestamp, order_id, ReasonCode::ZERO_QUANTITY);
+                return events();
+            }
+
+            if (new_price < 0) {
+                emit_rejected(timestamp, order_id, ReasonCode::NEGATIVE_PRICE);
+                return events();
+            }
+
+            if (new_price == order->price && new_qty < order->qty) {
+                reduced_order_quantity(*order, new_qty, timestamp);
+                return events();
+            }
+
+            if (new_price == order->price && new_qty == order->qty) {
+                return events();
+            }
+
+            const core::Side side = order->side;
+            const core::OrderType type = order->type;
+            const core::ParticipantId owner_id = order->participant_id;
+            const core::Price trigger_price = order->trigger_price;
+            const core::Quantity peak_qty = order->peak_qty;
+
+            emit_canceled(timestamp, order_id, order->qty);
+            retire_order(*order, core::OrderStatus::CANCELED);
+
+            Order *replacement = order_pool_.allocate();
+            if (replacement == nullptr) [[unlikely]] {
+                emit_rejected(timestamp, order_id, ReasonCode::ORDER_POOL_EXHAUSTED);
+                return events();
+            }
+
+            replacement = std::construct_at(replacement, Order{
+                .id = order_id,
+                .side = side,
+                .price = new_price,
+                .qty = new_qty,
+                .original_qty = new_qty,
+                .display_qty = new_qty,
+                .hidden_qty = 0,
+                .timestamp = timestamp,
+                .type = type,
+                .status = core::OrderStatus::NEW,
+                .participant_id = owner_id,
+                .trigger_price = trigger_price,
+                .peak_qty = peak_qty,
+            });
+
+            prepare_visible_slice(*replacement);
+            orders_[order_id] = OrderRecord{.order = replacement, .last_status = core::OrderStatus::NEW};
+
+            execute_inbound_order(*replacement, timestamp, true);
+            return events();
         }
 
         private: 
