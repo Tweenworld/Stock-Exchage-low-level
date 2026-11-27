@@ -54,7 +54,7 @@ namespace exchange::core {
             void initialize_free_list() noexcept{
                 free_list_head_ = nullptr;
                 for (std::size_t index = 0; index < N; ++index) {
-                    auto *node = reinterpret_cast<FreeNode*>(&slots_[index].storage.data());
+                    auto *node = reinterpret_cast<FreeNode*>(slots_[index].storage.data());
                     node->next = free_list_head_;
                     free_list_head_ = node;
                 }

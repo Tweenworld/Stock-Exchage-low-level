@@ -24,7 +24,7 @@ namespace exchange::matching {
         core::Quantity qty{0};
         core::OrderType order_type{core::OrderType::LIMIT};
         core::Timestamp timestamp{0};
-        core::ParticipantId partcipant_id{0};
+        core::ParticipantId participant_id{0};
         core::Price trigger_price{0};
         core::Quantity display_qty{0};
     };
@@ -56,11 +56,11 @@ namespace exchange::matching {
                     );
 
                     case RequestAction::CANCEL:return book.cancel_order(
-                        order.order_id, order.timestamp
+                        order.order_id, order.participant_id, order.timestamp
                     );
 
                     case RequestAction::MODIFY:return book.modify_order(
-                        order.order_id, order.qty, order.timestamp
+                        order.order_id, order.qty, order.price, order.participant_id, order.timestamp
                     );
                 }
 

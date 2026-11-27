@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstdint>
+
 #include "matching/order.h"
 
 namespace exchange::matching {
     struct alignas(64) Level {
         core::Price price{0};
-        core::Quantity total_qty{0};
+        std::uint64_t total_qty{0};
         std::uint32_t order_count{0};
         Order *head{nullptr};
         Order *tail{nullptr};
@@ -49,6 +51,6 @@ namespace exchange::matching {
 
         [[nodiscard]] Order *front() const noexcept { return head;}
 
-        [[nodicard]] bool is_empty() const noexcept { return head == nullptr;}
+        [[nodiscard]] bool is_empty() const noexcept { return head == nullptr;}
     };
 }

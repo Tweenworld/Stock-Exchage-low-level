@@ -29,6 +29,9 @@ namespace exchange::matching {
         INVALID_MODIFICATION,
         INVALID_ICEBERG_DISPLAY,
         ORDER_POOL_EXHAUSTED, 
+        STOP_POOL_EXHAUSTED,
+        ORDER_RECORD_CAPACITY_EXHAUSTED,
+        ORDER_OWNERSHIP_MISMATCH,
     };
 
     enum class EventType : std::uint8_t {
@@ -123,7 +126,7 @@ namespace exchange::matching {
             OrderFilled order_filled;
             OrderCanceled order_canceled;
             Trade trade;
-        } payload{};
+        } payload{.order_rejected = {}};
 
         static Event make(const OrderAccepted &value) noexcept {
             Event event{};
